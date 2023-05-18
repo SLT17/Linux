@@ -20,17 +20,18 @@ if [ -d "$dir" ]; then
                                 else
                                     echo "Error file owner" > $dir/$logfile
                         fi
-                if [ -f "$dir/$logfile" ]; then
-				# Предварительно настроить отправку писем с сервера (mail+ssmtp)
-                    cat $dir/$logfile | mail -s "Zip $vm $data" mail@gmail.com
-                    process_id0=$!
-                    wait $process_id0
-                    rm -f $dir/$logfile
-                fi
+                
         else
             echo "Files isn't exist" > $dir/$logfile
         fi
     else
         echo "Dir isn't exist" > $dir/$logfile
+fi
+if [ -f "$dir/$logfile" ]; then
+	# Предварительно настроить отправку писем с сервера (mail+ssmtp)
+    cat $dir/$logfile | mail -s "Zip $vm $data" mail@gmail.com
+    process_id1=$!
+    wait $process_id1
+    rm -f $dir/$logfile
 fi
 exit 0
