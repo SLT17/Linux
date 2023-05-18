@@ -8,7 +8,7 @@ file2=$(ls $dir | grep /*.xml)
 logfile=""$vm"_"$data".txt"
 cd $dir
     if [ -d "$dir" ]; then
-        if [ -f "$file1" || "$file2" ]; then
+        if [ -f $file1 ] || [ $file2 ]; then
             tar -czvf $vm_"$data".tar.gz $file1 $file2
 				process_id0=$!
 				wait process_id0
