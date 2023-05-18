@@ -5,21 +5,28 @@ dir="/root/Linux/script/backup/$vm"
 data=$(date+"%Y_%m_%d")
 file1=$(ls $dir | grep /*.qcow2)
 file2=$(ls $dir | grep /*.xml)
-
+logfile=""$vm"_"$data".txt"
 cd $dir
     if [ -d "$dir" ]; then
         if [ -f "$file1" || "$file2" ]; then
             tar -czvf $vm_"$data".tar.gz $file1 $file2
+				process_id0=$!
+				wait process_id0
+				rm -f $file1 $file2
+				zipfile=$(ls $dir | grep /*.tar.gz)
+				if [ -f $zipfile]; then 
+				chown backup0:backup0 $zipfile
+				else
+				echo "Error file owner" > $dir/$logfile
+				fi
         else
-            echo "Dir isn't exist" > text1.txt
+            echo "Files isn't exist" > $dir/$logfile
         fi 
     else
-    echo 
+	echo "Dir isn't exist" > $dir/$logfile
     fi
-    if [ -f $zipfile]; then
-    else
-    fi
-    echo | mail -s "" prok@gmail.com
+	if [ -f $dir/]
+    cat $dir/$logfile | mail -s $logfile prok@gmail.com
 
 exit 0
 
