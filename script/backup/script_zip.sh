@@ -26,12 +26,13 @@ if [ -d "$dir" ]; then
         fi
     else
         echo "Dir isn't exist" > $dir/$logfile
-fi
+
 if [ -f "$dir/$logfile" ]; then
 	# Предварительно настроить отправку писем с сервера (mail+ssmtp)
     cat $dir/$logfile | mail -s "Zip $vm $data" mail@gmail.com
     process_id1=$!
     wait $process_id1
     rm -f $dir/$logfile
+fi
 fi
 exit 0
