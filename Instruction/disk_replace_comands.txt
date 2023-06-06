@@ -1,0 +1,10 @@
+ceph osd rm osd.N
+ceph osd crush rm osd.N
+ceph auth del osd.N
+umount /var/lib/ceph/osd/ceph-N
+su cepher
+cd ~/cluster/
+ceph-deploy disk zap nodeN:/dev/sd*
+ceph-deploy osd prepare nodeN:/dev/sd*
+ceph osd crush add osd.N 1.08600 host=nodeN_hdd
+

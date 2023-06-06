@@ -1,0 +1,290 @@
+просмотр структуры кластера
+ceph osd tree
+
+просмотр состояния кластера
+ceph health
+ceph status
+ceph -w
+ceph -s
+
+получить дамп (crush-катру)
+ceph osd crush dump
+
+создание/удаление пулов
+ceph osd pool create hdd_pool 128
+ceph osd pool delete hdd_pool hdd_pool --yes-i-really-really-mean-it
+
+Удаление osd из кластера (osd должен быть в состоянии down)
+1.Макируем как down (останавливаем процесс osd)
+ceph osd down osd.<N> - номер диска (osd) подлежащего удалениею
+2. Удаляем из текущей конфигурации
+ceph osd rm osd.<N>
+3. Удаляем из crush-карты
+ceph osd crush rm osd.<N>
+4. Удаляем аутентификационные данные
+ceph auth del osd.<N>
+
+создание нового buket типа root (ssds)
+ceph osd crush add-buket ssds root
+создание нового buket типа host (node1-ssd)
+ceph osd crush add-buket node1-ssd host
+и т.д.
+
+перенос osd в нужный host
+ceph osd crush add osd.1 0.20850 host=node1-ssdf
+ceph osd crush set osd.1 0.20850 host=node1-ssd
+0.20850 - это вес osd (емкость диска)
+
+перенос bucket типа host (node1-ssd) в bucket типа root (ssds)
+ceph osd crush move node1-ssd root=ssds
+
+УСТАНОВКА ПАРАМЕТРОВ CEPH
+получить интервал mon_osd_down_out_interval - время в течение котороко остановленная OSD не считается "выбывшей" (до начала перестроения кластера) 
+на любои из мониторов:
+ceph daemon mon.a2-1 config get mon_osd_down_out_interval
+{
+    "mon_osd_down_out_interval": "600"
+}
+
+установит интервал в значение 1200: 
+ceph config set global mon_osd_down_out_interval 1200
+
+Ошибка PG_REPAIR ---------------------------------
+ceph health detail
+...
+[WARN]
+osd.278 had 58 reads repair
+...
+pg 2.35 is stuck undersized for 8m, current state active+undersized+degraded, last acting [278,65,676]
+...
+ceph pg repair 2.35
+ждем восстановления
+Если в результате восстановления появляется флаг repair_failed (ceph -s), проверяем состояние проблемного OSD (диска)
+На ноде, на которй запущен процесс osd.278 определяем сбойное блочное усторйство:
+ls -l /var/lib/ceph/osd/ceph-278/
+block -> /dev/ceph-block-5/block-5
+...
+lsblk
+...
+sdj                           8:144  0   1,1T  0 disk
+L-ceph--block--5-block--5   253:35   0   1,1T  0 lvm
+это /dev/sdj
+Смотрим состояние smart
+smartctl --all /dev/sdj
+...
+Error counter log:
+           Errors Corrected by           Total   Correction     Gigabytes    Total
+               ECC          rereads/    errors   algorithm      processed    uncorrected
+           fast | delayed   rewrites  corrected  invocations   [10^9 bytes]  errors
+read:   97875027    43853         0  97918880      44253        569,266         257
+write:         0        0         0         0          0       2376,817           0
+
+Non-medium error count:       36
+...
+Видим 257 ошибок чтения и 36 Non-medium ошибок.
+Останавливаем соответствующий процесс:
+systemctl status ceph-osd@278
+Выводим OSD из кластера как сбойный.
+---------------------------------------------------------
+
+СБРОС ОШИБКИ
+2 daemons have recently crashed
+просмотр какие ошибки имеются:
+ceph crash ls
+посмотреть только новые ошибки:
+ceph crash ls-new
+просмоттр подробой инфо. об ошибке:
+ceph crash info <id-ошибки>
+после выяснения причин переносим в архив все:
+ceph crash archive-all
+или по id конкретной ошибки:
+ceph crash archive <id-ошибки>
+
+СБРОС ОШИБКИ
+1 slow ops, oldest one blocked for 21360 sec, mon.b2-1 has slow ops
+просмотр детализации предупреждения:
+systemctl status ceph-mon@b2-1 -l
+после выяснения причин перезапустаем монитор:
+systemctl restart ceph-mon@b2-1
+
+РАЗБЛОКИРОВКА блочных устройств RADOS
+rbd ls -l  -p center_pool_a
+вывод:
+...
+WIN10_LTSC          300 GiB            2        excl
+...
+При услови, что ВМ с образос WIN10_LTSC остановлена запись "excl" указывает на блокировку блочного устройства.
+rbd lock ls -p user_pool_a WIN10_LTSC
+вывод укажет параметры, которые нужны для следующей команды для разблокировки образа:
+rbd lock rm center_pool_a2/WIN10_LTSC "auto 94664348975744" client.542013
+
+РАБОТА С ПУЛАМИ
+установка количества плейсмент-групп (256) для созданного ранее пула
+ceph osd pool set rbd pg_num 256
+ceph osd pool set rbd pgp_num 256
+
+создание нового пула ssd-pool с количеством плейсмент групп (pg, pgp) 128
+ceph osd pool create ssd-pool 128 128
+инициализация пула в качестве хранилища блочных устройств Rados (rbd)
+rbd pool init ssd-pool
+
+переименование ранее созданного пула rbd в hdd-pool
+ceph osd pool rename rbd hdd-pool
+
+создание в crush-карте нового правила (replicated_ruleset_ssd) для корневого buket ssds с зоной отказа host
+ceph osd crush rule create-simple replicated_ruleset_ssd ssds host
+
+закрепление за пулом hdd-pool правила c id=0
+ceph osd pool set hdd-pool crush_ruleset 0
+закрепление за пулом ssd-pool правила c id=1
+ceph osd pool set ssd-pool crush_ruleset 1
+посмотреть id правила можно выполнив команду ceph osd crush dump (строка "rule_id": 0 или 1)
+
+просмотр детализированной информации о пулах
+ceph osd pool ls detail
+
+РАБОТА С БЛОЧНЫМИ УСРТРОЙСТВАМИ rbd
+создание
+rbd create -p <имя пула> <имя образа> --size 4096
+удаление
+rbd rm <имя образа> -p <имя пула>
+rbd rm disk01 -p hdd-pool
+переименование
+rbd rename --pool <имя пула> <текущее имя образа> <новое имя образа> 
+rbd rename --pool hdd-pool rbd-data disk01
+просмотр блочных устройств в пуле
+rbd ls -l <имя пула>
+rbd ls -l hdd-pool
+
+Добавление в ceph поддержки системы мониторинга zabbix через штатный mgr.
+yum install zabbix-sender
+ceph mgr module enable zabbix
+проверяем список список включенных сервисов менеджера
+ceph mgr module ls
+смотрим конфигурацию ceph zabbix
+ceph zabbix config-show
+Устанавливаем необходимые параметры (идентификатор кластера и адрес )
+ceph zabbix config-set zabbix_host n1
+ceph zabbix config-set identifier ceph-79d91173-a125-4cec-8bbb-31138b08ac26
+
+
+Мапирование блочных устройств RADOS
+выключить features, которые не поддержимаются ядром (должен остаться features: layering и exclusive-lock)
+rbd feature disable <имя_образа> -p <имя_пула> exclusive-lock,object-map,fast-diff,deep-flatten
+rbd feature disable test_image1 -p data-pool exclusive-lock,object-map,fast-diff,deep-flatten
+мапируем
+rbd map <имя_образа> -p <имя_пула>
+rbd map test_image1 -p data-pool --id admin
+отобразить примапированные устройства
+rbd showmapped
+отмапировать
+rbd unmap /dev/rbd/<имя_пула>/<имя_образа>
+rbd unmap /dev/rbd/data-pool/test_image1
+
+РАБОТА С ТАРГЕТАМИ iscsi ПОВЕРХ rbd
+при запущеном сервисе tgtd.service:
+просмотр поддержки rbd
+tgtadm --lld iscsi --mode system --op show
+...
+Backing stores:
+    rbd (bsoflags sync:direct)
+...
+содержание конфигурационного файла /etc/tgt/conf.d/ceph.conf для проверки работы
+<target virtual-ceph>
+        driver iscsi
+        bs-type rbd
+        backing-store ssd-pool/disk01
+        initiator-address ALL
+</target>
+
+просмотр состояния текущей настройки iscsi target
+tgt-admin -s
+
+Настройка virt-manager в качестве проводника для ceph-пула
+Создаем xml-файл описывающий подключение к ceph пулу ssd_pool
+1.
+<pool type='rbd'>
+  <name>CEPH_POOL</name>
+  <uuid>8f7bdf47-d452-457e-9e26-b761948e456</uuid>
+  <capacity unit='bytes'>154084897624064</capacity>
+  <allocation unit='bytes'>10554802915</allocation>
+  <available unit='bytes'>154021847875584</available>
+  <source>
+    <host name='node1' port='6789'/>
+    <host name='node2' port='6789'/>
+    <host name='node3' port='6789'/>
+    <name>ssd_pool</name>
+    <auth type='ceph' username='libvirt'>
+      <secret uuid='180742e6-fba2-468c-8510-d57066241e94'/>
+    </auth>
+  </source>
+</pool>
+
+secret uuid и аутентификация в ceph настраивается в соответствии с руководством системного программиста для ПАК
+
+2.
+Определяем пул libvirt на основе созданного xml-файла
+virsh pool-define ceph_pool_define.xml
+проверяем:
+virsh pool-list
+устанавливаем в автозапуск и запускаем
+virsh pool-start CEPH_POOL
+virsh pool-autostart CEPH_POOL
+
+просмотреть описание пула можно так:
+virsh pool-dumpxml CEPH_POOL
+
+rbd://node1:6789/ssd_pool/one-0
+
+Конвертация образа ВМ из пула ceph в файл образа
+1.
+qemu-img convert -f raw -O qcow2 rbd:ssd_pool/disk02 /home/disk02.qcow2
+
+Добавление поддержки UEFI в ВМ
+1.
+Устанавливаем пакеты
+yum install -y ./edk2.git-ovmf-x64-0-20200422.1380.gfaef5a367c.noarch.rpm
+yum install -y ./edk2.git-tools-0-20200422.1380.gfaef5a367c.x86_64.rpm
+2.
+Подправляем конфигурацию (файл /etc/libvirt/qemu.conf)
+nvram = ["/usr/share/edk2.git/ovmf-x64/OVMF_CODE-pure-efi.fd:/usr/share/edk2.git/ovmf-x64/OVMF_VARS-pure-efi.fd"]
+2.5 Если сервис libvirt запускается не от суперпользователя (например, от oneadmin в случае opennebula), то необходимо подправить парамнтр:
+dinamic_ownership = 1
+3.
+Перезапускаем libvirtd
+systemctl restart libvirtd
+При создании ВМ будет доступен микрокод UEFI (его можно использовать вместо BIOS)
+4. Для включения поддержки UEFI через opennebula-sunstore при создании шаблона небходимо войти на вкладку "Метки" и ввести вручную параметры type=KVM в поле данные прописать:
+<os><loader readonly='yes' type='pflash'>/usr/share/edk2.git/ovmf-x64/OVMF_CODE-pure-efi.fd</loader></os>
+
+При возникновении предупреждения pool ssd_pool has many more objects per pg than average (too few pgs?)
+1.
+Проверяем значение mon_pg_warn_max_object_skew (по умолчанию 10)
+ceph-conf -D | grep mon_pg_warn_max_object_skew
+2.
+Увеличиваем его значение нагорячую
+ceph tell mon.* injectargs '--mon_pg_warn_max_object_skew 30'
+3.
+Прописываем в конфигурации (пользователь cepher, из директории cluster)
+[global]
+...
+mon_pg_warn_max_object_skew = 30
+
+ceph-deploy --overwrite-conf admin node1 node2 node3 node4 node5 node6
+for i in {1..6}; do echo "On node${i}: "; ssh node${i}; sudo chmod +r /etc/ceph/ceph.client.admin.keyring ; done
+4.
+Проверяем значение mon_pg_warn_max_object_skew (должно быть 30)
+ceph-conf -D | grep mon_pg_warn_max_object_skew
+
+5. Для установки среды виртуализации
+yum install libvirt qemu-kvm virt-install virt-manager
+
+
+MEGA_RAID
+megacli -pdInfo -PhysDrv[252:17] -a0
+megacli -CfgForeign -Scan -aALL
+megacli -PDClear -Start -PhysDrv[252:13] -a0
+megacli -PDClear -Stop -PhysDrv[252:13] -a0
+
+megacli -PDLocate -start -PhysDrv [252:16] -aAll - запустить подсветку диска в слоте 16
+megacli -PDLocate -stop -PhysDrv [252:16] -aAll - остановить подсветку
