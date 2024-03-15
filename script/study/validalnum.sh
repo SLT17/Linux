@@ -1,4 +1,4 @@
-#!/bin/Zsh
+#!/bin/zsh
 # validAlphaNum--Ensures that input consists only of alphabetical
 # and numeric characters
 validAlphaNum()
