@@ -9,7 +9,7 @@ logfile=("$vm"_"$data".txt)
 
 if [[ -d "$dir" ]]; then
         cd $dir
-        if [[ -f "$dir/$file1" ] || [ -f "$dir/$file2" ]]; then
+        if [[ -f "$dir/$file1" && "$dir/$file2" ]]; then
             tar -czvf "$vm"_"$data".tar.gz $file1 $file2
                                 process_id0=$!
                                 wait $process_id0
