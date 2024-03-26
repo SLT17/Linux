@@ -9,10 +9,10 @@ allspace="dirspace"
 spacebackup=$(df -h "$allspace" | grep "$allspace" | awk '{print $5}' | sed 's/%//g')
 usedspace=80
 
-if [ $spacebackup -gt $usedspace ]; then
+if [[ $spacebackup -gt $usedspace ]]; then
          echo "Free space off $dir/"$vm"_"$data"" | mail -s ""$vm"_"$data"" -S smtp="post.mail.ru" email@mail.ru 
 else
-        if [  -d "$dir"/"$vm" ]; then
+        if [[ -d "$dir"/"$vm" ]]; then
                 echo "Dir for backup "$vm"_"$data" is exist"
         else mkdir "$dir"/"$vm"
 fi
