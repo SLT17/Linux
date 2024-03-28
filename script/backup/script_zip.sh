@@ -18,15 +18,15 @@ if [[ -d "$dir" ]]; then
                                 if [[ -f $zipfile ]]; then
                                     chown backup0:backup0 $zipfile
                                 else
-                                    echo "Error file owner" > $dir/$logfile
+                                    echo "Error file owner" >> "$dir/$logfile"
                         fi
                 
         else
-            echo "Files isn't exist" > $dir/$logfile
+            echo "Files isn't exist" > "$dir/$logfile"
         fi
     else
-        echo "Dir isn't exist" > $dir/$logfile
-
+        echo "Dir isn't exist" > "$dir/$logfile"
+	echo "$SECONDS" > "$dir/$logfile"
 if [[ -f "$dir/$logfile" ]]; then
 	# Предварительно настроить отправку писем с сервера (mail+ssmtp)
     cat $dir/$logfile | mail -s "Zip $vm $data" mail@gmail.com
